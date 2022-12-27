@@ -26,7 +26,6 @@ current_channel_index = new_channel_index % CHANNEL_COUNT;
 atsc_channel_t* atsc_channel = &atsc_channels[current_channel_index];
 atsc_set_channel(&atsc_rx, atsc_channel->frequency_hz);
 
-Copy code
 // Update the display with the new channel information
 portapack_lcd_printf(0, 0, "Channel: %d", atsc_channel->channel);
 }
@@ -35,7 +34,6 @@ static void vTaskATSC( void *pvParameters ) {
 static atsc_rx_t atsc_rx;
 static atsc_signal_t atsc_signal;
 
-Copy code
 lcd_clear();
 lcd_puts("Decoding ATSC...");
 
@@ -51,4 +49,37 @@ while(1) {
 	
 	// Display the channel and program information on the screen
 	portapack_lcd_printf(0, 1, "Program: %d", atsc_signal.psip.program_number);
-	portapack_lcd_printf(0, 2, "
+	portapack_lcd_printf(0, 2, "Program Name: %s", atsc_signal.psip.program_name);
+
+// Check if the user has pressed the left or right buttons to change the channel
+if (portapack_io.j1_left()) {
+	change_channel(current_channel_index - 1);
+} else if (portapack_io.j1_right()) {
+	change_channel(current_channel_index + 1);
+}
+
+// Wait for a short period of time before decoding the next frame
+vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
+}
+
+int main(void) {
+portapack_init();
+
+xTaskCreate(
+vTaskATSC,
+"ATSC",
+1024,
+NULL,
+tskIDLE_PRIORITY + 1,
+NULL
+);
+
+vTaskStartScheduler();
+
+while(1) {
+
+}
+}
+
+#endif /* ATSC_APP_HPP */
