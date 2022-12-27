@@ -1,0 +1,46 @@
+#ifndef ATSC_APP_HPP
+#define ATSC_APP_HPP
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <portapack.h>
+#include <atsc.h>
+
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+
+#include <sgpio.h>
+
+#include <font.h>
+#include <lcd.h>
+
+#include <atsc_channels.h>
+
+// A global variable to store the current channel index
+uint32_t current_channel_index = 0;
+
+// A function to change the channel to a new index
+void change_channel(uint32_t new_channel_index) {
+	current_channel_index = new_channel_index % CHANNEL_COUNT;
+	atsc_channel_t* atsc_channel = &atsc_channels[current_channel_index];
+	atsc_set_channel(&atsc_rx, atsc_channel->frequency_hz);
+
+	// Update the display with the new channel information
+	portapack_lcd_printf(0, 0, "Channel: %d", atsc_channel->channel);
+}
+
+static void vTaskATSC( void *pvParameters ) {
+	static atsc_rx_t atsc_rx;
+	static atsc_signal_t atsc_signal;
+
+	// Clear the display and show a message
+	lcd_clear();
+	lcd_puts("Decoding ATSC...");
+
+	atsc_init(&atsc_rx, &atsc_signal, portapack_memory, portapack_spi, portapack_io);
+
+	while(1) {
+		// Set the current channel
+		atsc_channel_t* atsc_channel = &atsc_channels[current_channel_index];
+		atsc_set_channel(&atsc_rx, atsc_channel->frequency_hz
