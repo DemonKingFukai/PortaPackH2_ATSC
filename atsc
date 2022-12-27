@@ -1,0 +1,83 @@
+#include <stdint.h>
+#include <stdbool.h>
+#include <string.h>
+#include <portapack.h>
+#include <atsc.h>
+
+#include <FreeRTOS.h>
+#include <task.h>
+#include <semphr.h>
+
+#include <sgpio.h>
+
+#include <font.h>
+#include <lcd.h>
+
+#include <atsc_channels.h>
+
+#define CHANNEL_COUNT sizeof(atsc_channels) / sizeof(atsc_channel_t)
+
+// A global variable to store the current channel index
+uint32_t current_channel_index = 0;
+
+// A function to change the channel to a new index
+void change_channel(uint32_t new_channel_index) {
+	current_channel_index = new_channel_index % CHANNEL_COUNT;
+	atsc_channel_t* atsc_channel = &atsc_channels[current_channel_index];
+	atsc_set_channel(&atsc_rx, atsc_channel->frequency_hz);
+}
+
+static void vTaskATSC( void *pvParameters ) {
+	static atsc_rx_t atsc_rx;
+	static atsc_signal_t atsc_signal;
+	
+	lcd_clear();
+	lcd_puts("Decoding ATSC...");
+	
+	atsc_init(&atsc_rx, &atsc_signal, portapack_memory, portapack_spi, portapack_io);
+	
+	while(1) {
+		// Set the current channel
+		atsc_channel_t* atsc_channel = &atsc_channels[current_channel_index];
+		atsc_set_channel(&atsc_rx, atsc_channel->frequency_hz);
+		
+		// Decode the ATSC signal
+		atsc_decode(&atsc_rx, &atsc_signal, &display_framebuffer, display_width, display_height);
+		
+		// Display the channel information on the screen
+		portapack_lcd_printf(0, 0, "Channel: %d", atsc_channel->channel);
+		portapack_lcd_printf(0, 1, "Program: %d", atsc_signal.psip.program_number);
+		portapack_lcd_printf(0, 2, "Program Name: %s", atsc_signal.psip.program_name);
+		
+		// Check if the user has pressed the left or right buttons to change the channel
+		if (portapack_io.j1_left()) {
+			change_channel(current_channel_index - 1);
+		} else if (portapack_io.j1_right()) {
+			change_channel(current_channel_index + 1);
+		}
+		
+		// Wait for a short period of time before decoding the next frame
+		vTaskDelay(1000 / portTICK_PERIOD_MS);
+}
+}
+
+int main(void) {
+portapack_init();
+
+xTaskCreate(
+	vTaskATSC,
+	"ATSC",
+	1024,
+	NULL,
+	tskIDLE_PRIORITY + 1,
+	NULL
+);
+
+vTaskStartScheduler();
+
+while(1) {
+	
+}
+}
+
+#endif /* ATSC_APP_HPP */
