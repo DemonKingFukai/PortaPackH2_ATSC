@@ -1,0 +1,56 @@
+#include <stdio.h>
+#include <stdint.h>
+#include <string.h>
+#include <stdbool.h>
+
+#include "portapack.h"
+#include "sgpio.h"
+#include "atsc.h"
+#include "sdcard.h"
+#include "ili9341.h"
+#include "font.h"
+static volatile bool capture_complete = false;
+static uint8_t capture_buffer[ATSC_BUFFER_LEN];
+static uint32_t capture_timestamp;
+
+static ili9341_t display;
+static font_t font;
+static void atsc_decode(void) {
+    static atsc_t atsc;
+    static uint8_t atsc_symbol[ATSC_SYMBOL_LEN];
+    static bool atsc_symbol_valid = false;
+    static uint8_t atsc_segment[ATSC_SEGMENT_LEN];
+    static bool atsc_segment_valid = false;
+    static uint8_t atsc_field[ATSC_FIELD_LEN];
+    static bool atsc_field_valid = false;
+    static uint8_t atsc_message[ATSC_MESSAGE_LEN];
+    static bool atsc_message_valid = false;
+    static uint8_t atsc_packet[ATSC_PACKET_LEN];
+    static bool atsc_packet_valid = false;
+
+    // Process each symbol in the capture buffer.
+    for(size_t i=0; i<ATSC_BUFFER_LEN; i++) {
+        atsc_symbol[i%ATSC_SYMBOL_LEN] = capture_buffer[i];
+        atsc_symbol_valid = (i%ATSC_SYMBOL_LEN) == (ATSC_SYMBOL_LEN-1);
+
+        if(atsc_symbol_valid) {
+            if(atsc_add_symbol(&atsc, atsc_symbol)) {
+                // ATSC segment ready.
+                atsc_get_segment(&atsc, atsc_segment);
+                atsc_segment_valid = true;
+            }
+        }
+
+        if(atsc_segment_valid) {
+            if(atsc_add_segment(&atsc, atsc_segment)) {
+                // ATSC field ready.
+                atsc_get_field(&atsc, atsc_field);
+                atsc_field_valid = true;
+            }
+        }
+
+        if(atsc_field_valid) {
+            if(atsc_add_field(&atsc, atsc_field)) {
+                // ATSC message ready.
+                atsc_get_message(&atsc, atsc_message);
+                atsc_message_valid
